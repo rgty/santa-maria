@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>File Upload</title>
+	<style>
+		.container{
+			width:60%;
+			margin:auto;
+		}
+		.image-container{
+			position: relative;
+			width: 100%;
+			height: 100%;
+		}
+		img, p{
+			position: absolute;
+			left: 0px;
+			top:0px;
+		}
+		img{
+			width:240px;
+			height: 220px;
+			box-shadow: 0px 0.5px 1px gray;
+			display: none;
+			filter:grayscale(100%);
+			transition: all ease 2s;
+		}
+		p{
+			width: 240px;
+			height: 0px;
+			margin:0px;
+			display: none;
+			transition:all ease 2s;
+		}
+		p:last-child{
+			height: 220px;
+			opacity: 0.5;
+			background-color: #eee;
+		}
+		input[type=file]{
+			margin-top:50%;
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<div class="image-container">
+			<img>
+			<p></p>
+			<p></p>
+		</div>
+		<input type="file">
+	</div>
+	<script src="https://code.jquery.com/jquery-3.4.0.min.js"></script>
+	<script src="/socket.io/socket.io.js"></script>
+	<script>
+		$(document).ready(function(e){
+			var socket = io();
+			$('input[type=file]').change(function(e){
+				$('img').removeAttr('src');
+				$('img').hide();
+				$('p').css({'display':'none', 'height':'220px;'});
+				$('p:last-child').css({'height':'0px'});
+				if($(this)[0].files.length){
+					var fileReader = new FileReader();
+					fileReader.onload = function(){
+						$('img').attr('src', fileReader.result);
+						$('img').show();
+						$('p').show();
+					};
+					var file = $(this)[0].files[0];
+					fileReader.readAsDataURL(file);
+					var formData = new FormData();
+					formData.append("file"+file, file, file.name);
+					var request = new XMLHttpRequest();    
+					request.open("POST", "/fileupload");
+					request.send(formData);
+					socket.on('progress', function(e){
+						setTimeout(function(){
+							var height = Math.round((220/100)*parseInt(e));
+							$("p").css('height', height);
+							$("p:last-child").css('height', (220-height));
+							$('img').css('filter','grayscale('+(100-parseInt(e))+'%)');
+							if(parseInt(e) == 100){
+								setTimeout(function(e){
+									alert("Uploaded successfully!!");
+								}, 2000);
+							}
+						});
+					});
+				}
+			});
+		});
+	</script>
+</body>
+</html>

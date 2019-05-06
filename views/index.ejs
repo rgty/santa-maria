@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Node Chat</title>
+	<link href='https://fonts.googleapis.com/css?family=Roboto' rel='stylesheet'>
+	<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.3.1/css/all.css">
+	<style>
+		.container{
+			position: relative;
+			height: 500px;
+			width:650px;
+			margin: auto;
+		}
+		.chat-window{
+			width:99%;
+			height: 450px;
+			overflow-y: scroll;
+			padding-left: 0px;
+			border: 0.5px solid #ddd;
+			margin: auto;
+		}
+		form{
+			position: absolute;
+			bottom: 5px;
+			margin: auto;
+			width:100%;
+			margin: auto;
+			text-align: center;
+		}
+		input[type=text]{
+			border:none;
+			padding:7px;
+			width:85%;
+		}
+		button[type=submit]{
+			width: 7%;
+		}
+		input[type=text]:focus{
+			outline-width: 0;
+		}
+		img{
+			width:45%;
+		}
+		.chat{
+			width:48%;
+			list-style-type: none;
+			padding-left:5px;
+			padding-right:5px;
+			padding-bottom:5px;
+			box-shadow: 0.5px 1px 1.5px #ccc;
+			margin-bottom: 3px;
+			margin-top:3px;
+			overflow-wrap: break-word;
+		}
+		.chat-client{
+			float: right;
+			margin-right: 5px;
+			background-color: #DDFAD7;
+		}
+		.chat-server{
+			float: left;
+			margin-left: 5px;
+			background-color: #EEE;
+		}
+		.chat-title{
+			font-size: 12px;
+			margin-bottom:5px;
+			font-weight: none;
+			font-family: Roboto;
+			color:#aaa;
+			font-style: italic;
+		}
+		.chat-text{
+			width: 80%;
+			padding-top:5px;
+			padding-bottom:5px;
+			font-family: Roboto;
+			font-size: 13px;
+		}
+		.timestamp{
+			width: 20%;
+			font-size:10px;
+			float: right;
+			color: #aaa;
+			font-family: Roboto;
+			margin-top: 5px;
+		}
+		.fa{
+			font-size: 10px;
+		}
+		.online{
+			color:green;
+		}
+		.offline{
+			color:red;
+		}
+		.hide{
+			display: none;
+		}
+		.client-list{
+			list-style-type: none;
+			margin-right: 10px;
+		}
+		.fa{
+			margin-left:10px;
+		}
+		.fa-camera, .fa-chevron-circle-right{
+			font-size: 16px;
+			color:#333;
+			cursor: pointer;
+		}
+		.text-container{
+			border: 1px solid #ddd;
+			margin:0;
+			background-color: #ddd;
+		}
+		.progress-bar{
+			background-color: green;
+			opacity: 0.5;
+			height: 2px;
+			margin-bottom: 0px;
+			width: 0%;
+			transition: all ease 0.75s;
+			display: none;
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+	<ul class="chat-window"></ul>
+	<form action="javascript:void(0)" class="chat-form">
+		<p class="progress-bar"></p>
+		<p class="text-container">
+			<input type="text"/>
+			<i class="fa fa-camera" aria-hidden="true"></i>
+			<i class="fa fa-chevron-circle-right" aria-hidden="true"></i>
+			<button type="submit" style="display: none;"></button>
+			<input type="file" style="display: none;" accept="image/*"/>
+		</p>
+	</form>
+	</div>
+	<input type="hidden" id="_id" value="<%= _id %>">
+	<ul class="client-list"></ul>
+</body>
+<script src="https://code.jquery.com/jquery-3.4.0.min.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+	$(document).ready(function(){
+		var socket = io();
+		var serverId = $("#_id").val();
+		var clientId;
+		if(document.cookie){
+			clientId = document.cookie.split(":")[1];
+			socket.emit(serverId,"~"+clientId);
+		}else{
+			$.get('/marvel', function(data) {
+				clientId = data;
+				document.cookie = "uuid:"+clientId;
+				socket.emit(serverId,"~"+clientId);
+			});
+			setTimeout(function(){location.reload();}, 10);
+		}
+
+		$("input[type=text]").focus();
+
+		$(".fa-camera").click(function(){
+			$('input[type=file]').click();
+		});
+
+		$(".fa-chevron-circle-right").click(function(){
+			$('button[type=submit]').click();
+		});
+
+		var imageExtensions = ['jpg','jpeg','png']
+		$("input[type=file]").change(function(){
+			progressBar(0);
+			if($(this)[0].files.length){
+				var file = $(this)[0].files[0];
+				var extension = file.name.substring(file.name.lastIndexOf(".") + 1);
+				if(imageExtensions.includes(extension)){
+					var timeMil = (new Date().getTime()+"");
+					var filename = "";
+					for(var i in timeMil){
+						if(Math.round(Math.random())){
+							filename += String.fromCharCode(97 + parseInt(timeMil.charAt(i)));
+						}else{
+							filename += timeMil.charAt(i);
+						}
+					}
+					filename += "."+extension;
+					var formData = new FormData();
+					formData.append("file"+file, file, filename);
+					var request = new XMLHttpRequest();    
+					request.open("POST", "/fileupload");
+					request.send(formData);
+					socket.on('uploaded', function(e){
+						setTimeout(function(){
+							if($("input[type=file]")[0].files.length > 0){
+								$("input[type=text]").val(filename);
+							}
+						});
+					});
+					socket.on('progress', function(e){
+						setTimeout(function(){
+							if($("input[type=file]")[0].files.length > 0){
+								progressBar(e);
+							}
+						});
+					});
+				}
+			}
+		});
+
+		$("form").submit(function(){
+			var text = $("input[type=text]").val();
+			if(text.length > 0){
+				renderChat(false, text);
+				socket.emit(serverId, text+"~"+clientId);
+				$("input[type=text]").val("");
+				$("input[type=text]").removeAttr("prev");
+				$("input[type=file]").val("");
+				$("input[type=text]").focus();
+			}
+		});
+		
+		socket.on('is online '+clientId, function(){
+			socket.emit('is online '+serverId, clientId);
+		});
+
+		socket.on('online clients', function(clients){
+			$(".client-list").empty();
+			var keys = Object.keys(clients);
+			for(var i = 0;i < keys.length;i++){
+				if(keys[i] == clientId) continue;
+				var client = "<li id='"+keys[i]+"' class='client'>";
+				client += '<i class="fa fa-circle" aria-hidden="true"></i>&nbsp;';
+				client += '<span>'+keys[i]+'</span>';
+				client += "</li>";
+				$(".client-list").append(client);
+				if(clients[keys[i]]){
+					$("#"+keys[i]).children('.fa-circle').addClass("online");
+					$("#"+keys[i]).children('span').text(keys[i]);
+				}else{
+					$("#"+keys[i]).children('.fa-circle').addClass("offline");
+				}
+			}
+		});
+
+		$("input[type=text]").on('keyup keydown', function(){
+			if($(this).val().length && $(this).val() != $(this).attr("prev")){
+				socket.emit('typing', clientId);
+			}
+			$(this).attr("prev", $(this).val());
+		});
+
+		socket.on('typing', function(clientId){
+			$("#"+clientId).children('span').html(clientId+"&nbsp;[typing...]");
+		});
+
+		socket.on(clientId, function(message){
+			renderChat(true, message);
+		});
+		
+		socket.on(serverId, function(message){
+			renderChat(true, message);
+		});
+
+		function renderChat(server, message){
+			var className = 'chat-client';
+			var name = message.substring(0, message.indexOf("<br>"));
+			if(server){
+				className = 'chat-server';
+				name = "";
+			}else{
+				name = "<span class='chat-title'>You</span><br>";
+			}
+			
+			var index = message.lastIndexOf('.');
+			if(index > 0 && imageExtensions.includes(message.substring(index+1))){
+				index = message.indexOf('<br>');
+				var source = message.substring(index);
+				if(index > 0){
+					source = message.substring(index + 4);
+					name = message.substring(0, index + 4);
+				}
+				message = "<img src='"+source+"' style='margin-top:3px;cursor:zoom-in;' alt='404'/>";
+				progressBar(0);
+			}
+
+			var chatId = new Date().getTime();
+			var chat = "<li class='chat "+className+"' id="+chatId+">";
+			var chatText = "<span class='chat-text'>";
+			chatText += (name + message);
+			chatText += "</span>";
+			var timestamp = "<span class='timestamp'>";
+			var time = new Date().toLocaleTimeString().split(" ");
+			var meridian = time[1] ? time[1] : "";
+			time = time[0].split(":");
+			timestamp += time[0]+":"+time[1]+" "+meridian;
+			timestamp += "</span>"
+			chat += chatText;
+			chat += timestamp;
+			chat += "</li>";
+			$(".chat-window").append(chat);
+			addImageClick();
+			document.getElementById(chatId).scrollIntoView();
+		}
+
+		function addImageClick(){
+			$('img').off('click');
+			$('img').click(function(){
+				window.open($(this).attr("src"), '_blank');
+			});
+		}
+
+		function progressBar(value){
+			if(value != 0){
+				$(".progress-bar").show();
+				$(".progress-bar").css("width",value+"%");
+			} else{
+				$(".progress-bar").hide();
+				$(".progress-bar").css("width","0%");
+			}
+		}
+	});
+</script>
+</html>
